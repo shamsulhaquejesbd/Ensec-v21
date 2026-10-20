@@ -136,6 +136,8 @@ export const StockModule: React.FC<StockModuleProps> = ({
   const [mrrSearch, setMrrSearch] = useState('');
   const [mrrFilterQc, setMrrFilterQc] = useState<string>('all');
   const [selectedReceiptForVoucher, setSelectedReceiptForVoucher] = useState<CIDStockReceipt | null>(null);
+  const [showCidReceiveConfirmModal, setShowCidReceiveConfirmModal] = useState(false);
+  const [isPostingCidStock, setIsPostingCidStock] = useState(false);
 
   // Manual Inward Form State
   const [targetWhId, setTargetWhId] = useState(cidWarehouse?.id || 'wh-dhaka-1');
@@ -290,9 +292,17 @@ export const StockModule: React.FC<StockModuleProps> = ({
   const totalFormQty = formItems.reduce((acc, curr) => acc + curr.receivedQty, 0);
   const totalFormValuation = formItems.reduce((acc, curr) => acc + curr.totalCostBDT, 0);
 
-  const handleSubmitCIDReceipt = (e: React.FormEvent) => {
+  // Step 1: Trigger confirmation modal before posting stock
+  const handleInitiateCIDReceipt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formItems.length || totalFormQty <= 0) return;
+    setShowCidReceiveConfirmModal(true);
+  };
+
+  // Step 2: User explicitly confirms receiving into CID physical stock
+  const handleConfirmCIDReceipt = () => {
+    if (!formItems.length || totalFormQty <= 0) return;
+    setIsPostingCidStock(true);
 
     const targetWh = warehouses.find((w) => w.id === targetWhId) || cidWarehouse;
 
@@ -332,8 +342,10 @@ export const StockModule: React.FC<StockModuleProps> = ({
     };
     setSelectedReceiptForVoucher(createdReceipt);
 
-    // Reset MRR Form for next entry
+    // Reset MRR Form for next entry and close confirmation dialog
     handleResetForm();
+    setShowCidReceiveConfirmModal(false);
+    setIsPostingCidStock(false);
     setCidViewMode('register');
   };
 
@@ -1022,7 +1034,7 @@ export const StockModule: React.FC<StockModuleProps> = ({
 
           {/* VIEW MODE: MANUAL INWARD FORM */}
           {cidViewMode === 'form' && (
-            <form onSubmit={handleSubmitCIDReceipt} className="space-y-6">
+            <form onSubmit={handleInitiateCIDReceipt} className="space-y-6">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-6">
                 <div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -3353,6 +3365,186 @@ export const StockModule: React.FC<StockModuleProps> = ({
                   <span className="text-[10px] text-slate-400">Finance & Supply Chain Lead</span>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: CONFIRMATION BEFORE POSTING & RECEIVING INTO CID PHYSICAL STOCK     */}
+      {/* ========================================================================= */}
+      {showCidReceiveConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-850 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Confirm Physical Stock Inward
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Verify goods receipt details before posting to physical inventory
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCidReceiveConfirmModal(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto text-xs">
+              {/* Alert / Notice Banner */}
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold text-amber-900 dark:text-amber-300">
+                    Are you sure you want to receive and post this stock?
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-400 text-[11px]">
+                    This action will officially post <strong>{totalFormQty.toLocaleString()} units</strong> into the physical stock register of{' '}
+                    <strong>{warehouses.find((w) => w.id === targetWhId)?.name || 'Central Inventory Depot'}</strong> and generate an authenticated MRR voucher.
+                  </p>
+                </div>
+              </div>
+
+              {/* Inbound Summary Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 font-mono">
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">MRR Voucher #</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">{mrrNumber}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Receipt Date</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptDate}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Total Inward Units</span>
+                  <span className="font-bold text-blue-700 dark:text-blue-300 text-sm">{totalFormQty.toLocaleString()} PCS</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block font-sans">Total Value (BDT)</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">BDT {totalFormValuation.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Logistics & Authorization Details */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-[11px]">
+                <div>
+                  <span className="text-slate-400 block">Target Warehouse:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {warehouses.find((w) => w.id === targetWhId)?.name || 'Central Inventory Depot'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Production Source:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{sourceType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Challan / Gate Pass:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {challanNumber} {gatePassNumber ? `(GP: ${gatePassNumber})` : ''}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Carrier Vehicle / Driver:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {carrierVehicleNo} {driverName ? `• ${driverName}` : ''}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Storekeeper / QC Officer:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {receivedByOfficer} • {qcInspector}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">QC Status:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                    {qcStatus}
+                  </span>
+                </div>
+              </div>
+
+              {/* Product Lines Preview */}
+              <div>
+                <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1.5 text-xs">
+                  Products to be Received ({formItems.length} items):
+                </span>
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-[10px] uppercase font-bold text-slate-500">
+                      <tr>
+                        <th className="p-2.5">Product</th>
+                        <th className="p-2.5">Batch / Serial</th>
+                        <th className="p-2.5 text-right">Inward Qty</th>
+                        <th className="p-2.5 text-right">Unit Cost</th>
+                        <th className="p-2.5 text-right">Total (BDT)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                      {formItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                          <td className="p-2.5 font-sans font-semibold text-slate-800 dark:text-slate-200">
+                            {item.productName}
+                            <span className="block text-[10px] text-slate-400 font-mono">{item.sku}</span>
+                          </td>
+                          <td className="p-2.5 text-[11px] text-slate-600 dark:text-slate-400">
+                            {item.batchNumber || 'N/A'}
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-blue-600 dark:text-blue-400">
+                            {item.receivedQty} units
+                          </td>
+                          <td className="p-2.5 text-right text-slate-600 dark:text-slate-400">
+                            BDT {item.unitCostBDT.toLocaleString()}
+                          </td>
+                          <td className="p-2.5 text-right font-bold text-slate-800 dark:text-slate-200">
+                            BDT {item.totalCostBDT.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="px-6 py-3.5 bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-700 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCidReceiveConfirmModal(false)}
+                disabled={isPostingCidStock}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-850 transition-colors"
+              >
+                Cancel & Review Form
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCIDReceipt}
+                disabled={isPostingCidStock}
+                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isPostingCidStock ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Posting to Inventory...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Yes, Confirm & Post Stock</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
